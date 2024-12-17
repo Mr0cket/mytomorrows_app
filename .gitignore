@@ -29,6 +29,9 @@ override.tf.json
 terraform.rc
 .terraform/
 
+# To apply secrets locally:
+secrets.auto.tfvars
+
 # Helm
 *.tgz
 .helm/

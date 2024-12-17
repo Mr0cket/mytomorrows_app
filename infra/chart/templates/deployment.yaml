@@ -31,7 +31,12 @@ spec:
             {{- toYaml .Values.livenessProbe | nindent 12 }}
           readinessProbe:
             {{- toYaml .Values.readinessProbe | nindent 12 }}
-          env:
-            {{- with .Values.podEnvs }}
-            {{- toYaml . | nindent 12 }}
-            {{- end }}
+          envFrom:
+           {{- if not (empty .Values.envConfigs) }}
+           - configMapRef:
+                name: {{ .Release.Name }}-config
+          {{- end }}
+           {{- if not (empty .Values.envSecrets) }}
+           - secretRef:
+                name: {{ .Release.Name }}-secret
+          {{- end }}

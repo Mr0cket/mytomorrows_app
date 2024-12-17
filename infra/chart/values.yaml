@@ -1,26 +1,19 @@
 replicaCount: 1
-
 name: mytomorrows-app
-
 labels:
   app: mytomorrows
 image:
   repository: mr0cket/mytomorrows_app
   pullPolicy: IfNotPresent
   tag: ""
-podEnvs:
-  - name: PORT
-    value: "8080"
-
+envConfigs:
+  NAME: "myTomorrows"
 podAnnotations: {}
-
 podLabels:
   app: mytomorrows
-
 service:
   type: LoadBalancer
   port: 8080
-
 ingress:
   enabled: false
   className: ""
@@ -31,7 +24,6 @@ ingress:
         - path: /
           pathType: ImplementationSpecific
   tls: []
-
 livenessProbe:
   httpGet:
     path: /
