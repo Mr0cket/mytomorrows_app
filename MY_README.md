@@ -1,30 +1,38 @@
-## Initial Plan
+# MyTomorrows Kubernetes Application
 
-0. Containerise application using Docker (create Dockerfile)
+## Deployment
 
-1. Setup a cluster locally
+### Prerequisites
 
-2. Create helm chart
+- Docker
+- Helm
+- Kubernetes (kind/minikube/etc.)
+- Terraform
 
-3. Create terrform script to deploy heml chart
+### Steps
 
-4. Deploy the helm chart
+0. Setup a cluster locally or in cloud & configure as default context `kubectl config use-context CLUSTER_ID`
 
-## Nice-to-haves
+1. In `/infra` directory, create `secrets.auto.tfvars` file to store sensitive data:
 
-5. Setup kubernetes (k3s) on Raspberry PI
+```tf
+app_secrets = {
+  "SECRET_KEY" = "top-secret-key",
+  "DB_PASSWORD" = "admin123",
+}
+```
 
-6. Deploy the helm chart on Raspberry PI
+2. Set path to kubeconfig file `export KUBE_CONFIG_PATH=~/.kube/config`:
 
-7. Expose Raspberry PI to the internet
+3. Run `terraform init && terraform apply` to deploy the application to Kubernetes.
 
-8. Expose k8s deployment via service (ingress)
+4. Verify successful deployment:
 
-9. Investigate secret management
-
-10. ??
-
-11. Profit
+```sh
+kubectl get pods -l 'app.kubernetes.io/name=mytomorrows-app'
+export SERVICE_IP=$(kubectl get svc -l 'app.kubernetes.io/name=mytomorrows-app' -ojsonpath='{.items[0].status.loadBalancer.ingress[0].hostname}')
+curl -v $SERVICE_IP:8080
+```
 
 ## Design Decisions
 
@@ -35,7 +43,7 @@
 - Used a multi-stage build to reduce the size of the final image.
 - Used production-grade WSGserver (Granian) to ensure the application can serve and scale as needed.
 - Used pipenv to simplify dependency management & version locking.
-- Investigated multi-stage Dockerfile builds, but decided against (reduction in image size insignifcant).
+- Investigated multi-stage Dockerfile builds, decided against (reduction in image size insignifcant).
 
 ### Helm Chart
 
@@ -43,16 +51,41 @@
 - Chart creates a deployment, service and (optionally) ingress.
 - By default application is exposed via service (loadbalancer).
 - Chart uses secrets to pass sensitive environment variables to the container.
-- Secrets are
+- Secrets are generated values which are passed via helm values.yaml or terraform variables (Not secure for production).
 
-### Tradeoffs with the current Design:
+### AWS Networking Strategy
+
+The strategy I would adopt for deploying production-ready applications on AWS would greatly depend on the existing networking landscape of the organisation, and thee organisations plans for future growth.
+
+In general, For kubernetes networking I would use the following components:
+
+- A VPC with public and private subnets across multiple AZs to host k8s resources.
+- For production: AWS Gateway API Controller to Manage North-Ingress to services.
+- Amazon VPC Lattice to manage East/West (service to service) traffic.
+
+### Scalability, Availability & Security
+
+- Scalability is handled via Kubernetes deployment with configurable replica count
+- Health checks implemented via liveness/readiness probes in deployment.yaml
+- LoadBalancer service type enables horizontal scaling and traffic distribution
+- Security implemented through:
+  - Secret management for sensitive data
+  - Containerized application with minimal dependencies
+  - Networking isolation through VPC/subnets/firewall rules
+  - Minimal roles for services following least privilege access
+- Fault tolerance achieved through:
+  - Multiple pod replicas
+  - Self-healing through Kubernetes deployments
+  - Health check probes for automatic recovery
+
+### Tradeoffs/Concerns with the current Design:
 
 1. Infrastructure configuration stored in the same repository as the code:
 
-- Application lifecycle is not decoupled from the infrastructure lifecycle (Harder to update 1 without updating the other)
+- App lifecycle not decoupled from the infrastructure lifecycle (Harder to update one, without updating the other)
 - Changes to infrastructure (e.g: updating environment variables, or adding a new environment) could trigger build/release of the application.
 - More difficult to roll-back changes to infrastructure without rolling back the application as well.
-- As number of applications grows, infrastructure becomes more dispersed, and harder to manage.
+- As number of applications grows, infrastructure becomes dispersed and harder to manage.
 
 2. Using Terraform for kubernetes resource management:
 
@@ -65,5 +98,26 @@
 
 3. Secret Management:
 
-- Secrets are stored locally, and not comitted to the repository.
-- Secrets are not managed by a secret management tool, and are not rotated.
+- Secrets are stored locally, and not comitted to the repository, not a 3rd party secret management tool.
+- This means they must be manually managed, or included in the cloud-based terraform CI/CD pipeline.
+
+### Improvements:
+
+To improve the soluton, and to address the trade-offs mentioned above, I recommend the following:
+
+1. For CI/CD, I would use a dedicated K8s management tool, such as ArgoCD, or FluxCD. This would improve the reliability of CI/CD, and allow for more control over the deployment process.
+
+2. I recommend consolidating managment of K8s application resources to a separate repo. This would enable you to manage the application & infrastructure lifecycles independently, and simplify roll-backs/updates.
+
+3. For k8s Secret management, I recommend using a solution such as:
+
+- `External Secrets` for secret management through Provider services (AWS Secrets Manager, etc.), or;
+- `Sealed Secrets` to safely store secrets in git (secret resources deployed separately from app helm chart).
+
+4. I would also improve the helm chart by:
+
+- Adding gateway API template for ingress management.
+- Adding service account & role binding resources.
+- Improving scaling/autoscaling configuration.
+- Improving support for different deployment strategies
+- Support for prometheus metrics & logging.

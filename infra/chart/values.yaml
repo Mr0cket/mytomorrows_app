@@ -8,6 +8,8 @@ image:
   tag: ""
 envConfigs:
   NAME: "myTomorrows"
+envSecrets: # Can be populated from terraform or helm values.yaml files
+  SECRET_FROM_VALUES.YAML: "ABCD"
 podAnnotations: {}
 podLabels:
   app: mytomorrows
