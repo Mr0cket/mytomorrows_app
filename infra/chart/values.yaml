@@ -12,8 +12,6 @@ envConfigs:
 envSecrets: # Can be populated from terraform or helm values.yaml files
   SECRET_FROM_VALUES.YAML: "ABCD"
 podAnnotations: {}
-podLabels:
-  app: mytomorrows
 service:
   type: LoadBalancer
   port: 6666

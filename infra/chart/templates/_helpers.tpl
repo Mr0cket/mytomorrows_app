@@ -13,15 +13,6 @@ Expand the name of the chart.
 {{/*
 Common labels
 */}}
-{{- define "mytomorrows.labels" -}}
-helm.sh/chart: {{ include "mytomorrows.chart" . }}
-{{- if .Chart.AppVersion }}
-app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
-{{- end }}
-app.kubernetes.io/managed-by: {{ .Release.Service }}
-{{- end }}
-
-
 
 {{- define "mytomorrows.selectorLabels" -}}
 app.kubernetes.io/name: {{ include "mytomorrows.name" . }}
@@ -29,9 +20,14 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
 
 
-{{- define "mytomorrows.podLabels" -}}
-{{- include "mytomorrows.selectorLabels" . | nindent 4 }}
-{{- with .Values.podLabels }}
-{{- toYaml . | nindent 4 }}
+{{- define "mytomorrows.labels" -}}
+helm.sh/chart: {{ include "mytomorrows.chart" . }}
+{{- include "mytomorrows.selectorLabels" . | nindent 0 }}
+{{- if .Chart.AppVersion }}
+app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
+{{- end }}
+app.kubernetes.io/managed-by: {{ .Release.Service }}
+{{- with .Values.labels }}
+{{- toYaml . | nindent 0 }}
 {{- end -}}
-{{- end -}}
+{{- end }}
