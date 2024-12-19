@@ -3,9 +3,9 @@
 ## Live Server address:
 
 The kubernetes cluster & application are hosted locally on my raspberryPI.
-The application is exposed via the address:
+The application is exposed via the following url. Please note it is only accessible via curl or postman (not browser) as it uses an 'unsafe port':
 
-http://homesterdam.ydns.io:6666
+http://mytomorrows-api.ydns.eu:6666
 
 ## Deployment
 
