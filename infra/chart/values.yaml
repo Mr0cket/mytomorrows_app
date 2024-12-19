@@ -8,6 +8,7 @@ image:
   tag: ""
 envConfigs:
   NAME: "myTomorrows"
+  PORT: "80"
 envSecrets: # Can be populated from terraform or helm values.yaml files
   SECRET_FROM_VALUES.YAML: "ABCD"
 podAnnotations: {}
@@ -15,7 +16,8 @@ podLabels:
   app: mytomorrows
 service:
   type: LoadBalancer
-  port: 8080
+  port: 6666
+  targetPort: 80
 ingress:
   enabled: false
   className: ""

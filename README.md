@@ -1,42 +1,130 @@
-# DevOps Assignment
+# MyTomorrows Kubernetes Application
 
-## Objective
+## Live Server address:
 
-The goal of this assignment is to evaluate your understanding of key infrastructure concepts. We aim to gauge how you approach problem-solving and implement solutions while considering modern technology constraints such as scalability, availability, security, resilience, and fault-tolerance. This assignment encourages you to implement solutions based on your preferred approach and provide justification for your choices.
+The kubernetes cluster & application are hosted locally on my raspberryPI.
+The application is exposed via the address:
 
-## The Task
+http://homesterdam.ydns.io:6666
 
-This repository contains a basic Python Flask application that returns a string at the "/" endpoint and a JSON response at the "/config" endpoint. The task is to containerize this application and deploy the resulting image to a Kubernetes cluster using Terraform (Infrastructure as Code). After deployment, both endpoints should be accessible via a browser or curl.
+## Deployment
 
-## Instructions
+### Prerequisites
 
-- Create all the code and README's related to this task, in a new repository in your personal version control account.
-- Push all the code to the repository
-- Share the repository with us
+- Docker
+- Helm
+- Kubernetes (kind/minikube/etc.)
+- Terraform
 
-## The Requirements
+### Steps
 
-- Containerize application. Push the image to a container registry of your choice.
-- The values for the environment variable in the Python script can be random.
-- The application must be deployed to a Kubernetes cluster using a Helm chart.
-- The application should be exposed and accessible via a browser.
-- Terraform must be used to manage the deployment to the Kubernetes cluster.
-- The Terraform state can be stored locally.
-- Avoid using hardcoded values in the Helm charts or Terraform code; instead, apply best practices such as using secrets, config maps, and variables wherever possible.
-- The Kubernetes cluster can be hosted on any platform of your choice (Minikube, Kind, or any cloud provider).
-- Please create a README.md:
-    - Explaining how the code works, how to deploy the application and how to verify its successful deployment.
-    - Explain the decisions made during the design and implementation of the solution.
-    - Explain the networking strategy you would adopt to deploy production ready applications on AWS. 
-    - Describe how you would implement a solution to grant access to various AWS services to the deployed application.
-    - Describe how would you automate deploying the solution across multiple environments using CI/CD.
-    - Discuss any trade-offs considered when designing the solution.
-    - Explain how scalability, availability, security, and fault tolerance are addressed in the solution.
-    - Suggest any potential enhancements that could be made to improve the overall solution.
+0. Setup a cluster locally or in cloud & configure as default context `kubectl config use-context CLUSTER_ID`
 
-## Good to have
+1. In `/infra` directory, create `secrets.auto.tfvars` file to store sensitive data:
 
-- The same Helm charts should be reusable to deploy across multiple environments, with different configurations for each.
-- The Terraform code should be reusable and capable of being deployed to multiple environments, each with its own configuration.
-- An open-source monitoring solution can be deployed, providing basic observability for the application.
-- Adding a health check endpoint in the application, and using that in the deployments improving Availability.
+```tf
+app_secrets = {
+  "SECRET_KEY" = "top-secret-key",
+  "DB_PASSWORD" = "admin123",
+}
+```
+
+2. Set path to kubeconfig file `export KUBE_CONFIG_PATH=~/.kube/config`:
+
+3. Run `terraform init && terraform apply` to deploy the application to Kubernetes.
+
+4. Verify successful deployment:
+
+```sh
+kubectl get pods -l 'app.kubernetes.io/name=mytomorrows-app'
+export SERVICE_IP=$(kubectl get svc -l 'app.kubernetes.io/name=mytomorrows-app' -ojsonpath='{.items[0].status.loadBalancer.ingress[0].hostname}')
+curl -v $SERVICE_IP:8080
+```
+
+## Design Decisions
+
+### Containerisation of Python Application
+
+- Created a dockerfile, exposing a number of useful environment variables to the container,
+- Run application as a module instead of a script.
+- Used a multi-stage build to reduce the size of the final image.
+- Used production-grade WSGI server (Granian) to ensure the application can serve and scale as needed.
+- Used pipenv to simplify dependency management & version locking.
+- Investigated multi-stage Dockerfile builds, decided against (reduction in image size insignifcant).
+
+### Helm Chart
+
+- Created a helm chart to deploy python applications to Kubernetes.
+- Chart creates a deployment, service and (optionally) ingress.
+- By default application is exposed via service (loadbalancer).
+- Chart uses secrets to pass sensitive environment variables to the container.
+- Secrets are generated values which are passed via helm values.yaml or terraform variables (Not secure for production).
+
+### AWS Networking Strategy
+
+The strategy I would adopt for deploying production-ready applications on AWS would greatly depend on the existing networking landscape of the organisation, and thee organisations plans for future growth.
+
+In general, For kubernetes networking I would use the following components:
+
+- A VPC with public and private subnets across multiple AZs to host k8s resources.
+- For production: AWS Gateway API Controller to Manage North-Ingress to services.
+- Amazon VPC Lattice to manage East/West (service to service) traffic.
+
+### Scalability, Availability & Security
+
+- Scalability is handled via Kubernetes deployment with configurable replica count
+- Health checks implemented via liveness/readiness probes in deployment.yaml
+- LoadBalancer service type enables horizontal scaling and traffic distribution
+- Security implemented through:
+  - Secret management for sensitive data
+  - Containerized application with minimal dependencies
+  - Networking isolation through VPC/subnets/firewall rules
+  - Minimal roles for services following least privilege access
+- Fault tolerance achieved through:
+  - Multiple pod replicas
+  - Self-healing through Kubernetes deployments
+  - Health check probes for automatic recovery
+
+### Tradeoffs/Concerns with the current Design:
+
+1. Infrastructure configuration stored in the same repository as the code:
+
+- App lifecycle not decoupled from the infrastructure lifecycle (Harder to update one, without updating the other)
+- Changes to infrastructure (e.g: updating environment variables, or adding a new environment) could trigger build/release of the application.
+- More difficult to roll-back changes to infrastructure without rolling back the application as well.
+- As number of applications grows, infrastructure becomes dispersed and harder to manage.
+
+2. Using Terraform for kubernetes resource management:
+
+- Additional layer of complexity to infrastructure tooling for little benefit.
+- Terraform Plans effectively useless as they only show changes to the helm resource, not changes to the underlying kubernetes manifests/resources.
+- e.g: how changes to helm-release terraform resource will affect the deployment, service, ingress, etc. of the application.
+- Kubernetes Errors are more difficult to debug (Terraform does not provide as useful error messages).
+- Changes to helm templates/chart require a new release of chart for terraform to pick up the changes.
+- Occasionally hangs on apply/destroy, requiring manual intervention to fix the state.
+
+3. Secret Management:
+
+- Secrets are stored locally, and not comitted to the repository, not a 3rd party secret management tool.
+- This means they must be manually managed, or included in the cloud-based terraform CI/CD pipeline.
+
+### Improvements:
+
+To improve the soluton, and to address the trade-offs mentioned above, I recommend the following:
+
+1. For CI/CD, I would use a dedicated K8s management tool, such as ArgoCD, or FluxCD. This would improve the reliability of CI/CD, and allow for more control over the deployment process.
+
+2. I recommend consolidating managment of K8s application resources to a separate repo. This would enable you to manage the application & infrastructure lifecycles independently, and simplify roll-backs/updates.
+
+3. For k8s Secret management, I recommend using a solution such as:
+
+- `External Secrets` for secret management through Provider services (AWS Secrets Manager, etc.), or;
+- `Sealed Secrets` to safely store secrets in git (secret resources deployed separately from app helm chart).
+
+4. I would also improve the helm chart by:
+
+- Adding gateway API template for ingress management.
+- Adding service account & role binding resources.
+- Improving scaling/autoscaling configuration.
+- Improving support for different deployment strategies
+- Support for prometheus metrics & logging.
